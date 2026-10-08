@@ -23,15 +23,27 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
 
-      - name: Chercher les nouvelles vidéos
+      - name: Chaîne 1 - VOD
         run: python youtube_discord.py
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           YT_CHANNEL_ID: ${{ vars.YT_CHANNEL_ID }}
+          STATE_FILE: videos_postees.txt
+          MESSAGE: "🎮 **Nouvelle VOD !** {titre}\n{lien}"
+
+      - name: Chaîne 2 - Nouvelles vidéos
+        if: always()   # tourne même si la chaîne 1 a eu un souci
+        run: python youtube_discord.py
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_2 }}
+          YT_CHANNEL_ID: ${{ vars.YT_CHANNEL_ID_2 }}
+          STATE_FILE: videos_postees_2.txt
+          MESSAGE: "@everyone 🎬 **Nouvelle vidéo !** {titre}\n{lien}"
 
       - name: Sauvegarder la liste des vidéos postées
+        if: always()
         run: |
-          git add videos_postees.txt
+          git add videos_postees*.txt
           git diff --cached --quiet || (git commit -m "MAJ vidéos postées" && git push)
 
       - name: Garder le bot actif (évite la pause des 60 jours)
