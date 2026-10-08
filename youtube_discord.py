@@ -1,10 +1,12 @@
 """
-Poste automatiquement les nouvelles vidéos/VOD d'une chaîne YouTube
+Poste automatiquement les nouvelles vidéos d'une chaîne YouTube
 dans un salon Discord via un webhook.
 
-Variables d'environnement (configurées dans GitHub, jamais dans le code) :
+Variables d'environnement (définies dans le workflow GitHub) :
   DISCORD_WEBHOOK : l'URL du webhook Discord (secret)
   YT_CHANNEL_ID   : l'ID de la chaîne YouTube (commence par "UC")
+  STATE_FILE      : fichier qui mémorise les vidéos déjà postées
+  MESSAGE         : texte du message, avec {titre} et {lien}
 """
 import json
 import os
@@ -13,7 +15,8 @@ import xml.etree.ElementTree as ET
 
 WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 CHANNEL_ID = os.environ["YT_CHANNEL_ID"].strip()
-STATE_FILE = "videos_postees.txt"
+STATE_FILE = os.environ.get("STATE_FILE", "videos_postees.txt")
+MESSAGE = os.environ.get("MESSAGE", "🎮 **Nouvelle VOD !** {titre}\n{lien}")
 FEED_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
 NS = {
@@ -39,7 +42,9 @@ def lire_flux():
 
 def poster_discord(video):
     message = {
-        "content": f"🎮 **Nouvelle VOD !** {video['titre']}\n{video['lien']}",
+        "content": MESSAGE.format(titre=video["titre"], lien=video["lien"]),
+        # autorise le ping @everyone s'il est présent dans le message
+        "allowed_mentions": {"parse": ["everyone"]},
     }
     req = urllib.request.Request(
         WEBHOOK,
@@ -53,29 +58,26 @@ def poster_discord(video):
 def main():
     videos = lire_flux()
 
-    # Premier lancement : on mémorise les vidéos existantes sans rien poster,
-    # pour ne pas spammer le salon avec tout l'historique.
+    # Premier lancement : on mémorise les vidéos existantes sans rien poster.
     if not os.path.exists(STATE_FILE):
         with open(STATE_FILE, "w") as f:
             f.write("\n".join(v["id"] for v in videos))
-        print(f"Premier lancement : {len(videos)} vidéos mémorisées, rien posté.")
+        print(f"[{STATE_FILE}] Premier lancement : {len(videos)} vidéos mémorisées, rien posté.")
         return
 
     with open(STATE_FILE) as f:
         deja_postees = set(f.read().split())
 
     nouvelles = [v for v in videos if v["id"] not in deja_postees]
-    for video in reversed(nouvelles):  # de la plus ancienne à la plus récente
+    for video in reversed(nouvelles):
         poster_discord(video)
-        print(f"Postée : {video['titre']}")
-        deja_postees.add(video["id"])
+        print(f"[{STATE_FILE}] Postée : {video['titre']}")
 
-    # On garde seulement les IDs encore présents dans le flux (15 dernières vidéos)
     with open(STATE_FILE, "w") as f:
         f.write("\n".join(v["id"] for v in videos))
 
     if not nouvelles:
-        print("Aucune nouvelle vidéo.")
+        print(f"[{STATE_FILE}] Aucune nouvelle vidéo.")
 
 
 if __name__ == "__main__":
