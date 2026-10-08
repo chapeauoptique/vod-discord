@@ -12,11 +12,16 @@ jobs:
   verifier:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Configurer git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
 
       - name: Chercher les nouvelles vidéos
         run: python youtube_discord.py
@@ -26,7 +31,16 @@ jobs:
 
       - name: Sauvegarder la liste des vidéos postées
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
           git add videos_postees.txt
           git diff --cached --quiet || (git commit -m "MAJ vidéos postées" && git push)
+
+      - name: Garder le bot actif (évite la pause des 60 jours)
+        run: |
+          derniere=$(git log -1 --format=%ct)
+          maintenant=$(date +%s)
+          jours=$(( (maintenant - derniere) / 86400 ))
+          echo "Dernière activité il y a $jours jours."
+          if [ "$jours" -ge 45 ]; then
+            git commit --allow-empty -m "Maintien en activité"
+            git push
+          fi
